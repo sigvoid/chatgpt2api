@@ -166,6 +166,8 @@ def image_chat_response(body: dict[str, Any]) -> dict[str, Any]:
         output_tokens=count_image_output_items_tokens(result.get("data")),
     )
     response["usage"] = chat_usage_from_image_usage(usage)
+    if result.get("_account_email"):
+        response["_account_email"] = result["_account_email"]
     return response
 
 
@@ -186,7 +188,10 @@ def stream_image_chat_completion(image_outputs: Iterable[ImageOutput], model: st
     created = int(time.time())
     sent_role = False
     sent_text = ""
+    account_email = ""
     for output in image_outputs:
+        if output.account_email and not account_email:
+            account_email = output.account_email
         content = ""
         if output.kind == "progress":
             content = output.text
@@ -204,7 +209,10 @@ def stream_image_chat_completion(image_outputs: Iterable[ImageOutput], model: st
             yield completion_chunk(model, {"content": content}, None, completion_id, created)
     if not sent_role:
         yield completion_chunk(model, {"role": "assistant", "content": ""}, None, completion_id, created)
-    yield completion_chunk(model, {}, "stop", completion_id, created)
+    stop_chunk = completion_chunk(model, {}, "stop", completion_id, created)
+    if account_email:
+        stop_chunk["_account_email"] = account_email
+    yield stop_chunk
 
 
 def handle(body: dict[str, Any]) -> dict[str, Any] | Iterator[dict[str, Any]]:
